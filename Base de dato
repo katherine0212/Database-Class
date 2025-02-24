@@ -1,5 +1,5 @@
 CREATE DATABASE educacion; 
-ON PRIMARY
+/*ON PRIMARY
 (
 NAME = 'educacion_Data' ,
 FILENAME = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\BdTestV4.mdf',
@@ -14,7 +14,7 @@ FILENAME = 'C:\Program Files\Microsoft SQL Server\MSSQL16.SQLEXPRESS\MSSQL\DATA\
 SIZE = 5MB,
 MAXSIZE = 100MB,
 FILEGROWTH = 5MB
-)
+)*/
 go
 USE educacion;
 go
@@ -1204,61 +1204,100 @@ WHERE id_matricula = 2;
 
 
 -- CONSULTAS CON CONDICIONES
+-- 1. Obtener los alumnos de la carrera de Ingeniería Civil
+SELECT * FROM alumno
+WHERE id_carrera = (SELECT id_carrera FROM carrera WHERE nombre = 'Ingeniería Civil');
 
--- lista de los alumnos
-SELECT a.nombre, a.apellido, c.nombre AS carrera
+-- 2. Listar los pagos realizados por transferencia bancaria mayores a 500 soles
+SELECT * FROM pago
+WHERE metodo_pago = 'Transferencia bancaria' AND monto > 500;
+
+-- 3. Mostrar los alumnos matriculados en el semestre 2025-I
+SELECT a.*
 FROM alumno a
-JOIN carrera c ON a.id_carrera = c.id_carrera
-WHERE c.nombre = 'Ingeniería Civil';
+JOIN matricula m ON a.id_alumno = m.id_alumno
+WHERE m.id_semestre = (SELECT id_semestre FROM semestre WHERE denominacion = '2025-I');
 
--- ver las matriculas acivas
-SELECT * 
-FROM matricula 
-WHERE vigencia = 'V' 
-  AND id_semestre = (SELECT id_semestre FROM semestre WHERE denominacion = '2024-I');
+-- 4. Listar las sedes ubicadas en el distrito de 'San Sebastián'
+SELECT * FROM sede
+WHERE id_distrito = (SELECT id_distrito FROM distrito WHERE nombre = 'San Sebastián');
 
 
- -- CONSULTAS AGRUPADAS
 
- -- cantidad de alumnos de las carreras
- SELECT c.nombre AS carrera, COUNT(a.id_alumno) AS cantidad_alumnos
-FROM alumno a
-JOIN carrera c ON a.id_carrera = c.id_carrera
-GROUP BY c.nombre;
+-- CONSULTAS AGRUPADAS
+-- 1. Contar el número de alumnos por carrera
+SELECT id_carrera, COUNT(*) AS cantidad_alumnos
+FROM alumno
+GROUP BY id_carrera;
 
--- total de pagos realizados
-SELECT metodo_pago, SUM(monto) AS total_pagado
+-- 2. Total de pagos realizados por cada método de pago
+SELECT metodo_pago, SUM(monto) AS total_recaudado
 FROM pago
 GROUP BY metodo_pago;
 
+-- 3. Número de matrículas activas e inactivas
+SELECT vigencia, COUNT(*) AS cantidad
+FROM matricula
+GROUP BY vigencia;
+
+-- 4. Cantidad de alumnos por distrito
+SELECT id_distrito, COUNT(*) AS total_alumnos
+FROM alumno
+GROUP BY id_distrito;
+
+
 
 -- CONSULTAS COMBINADAS
+-- 1. Mostrar todos los alumnos y sus respectivas matrículas (INNER JOIN)
+SELECT a.nombre, a.apellido, m.fecha_matricula, m.vigencia
+FROM alumno a
+INNER JOIN matricula m ON a.id_alumno = m.id_alumno;
 
--- lista de los docentes
-SELECT nombre, apellido, 'Alumno' AS rol FROM alumno
-UNION
-SELECT nombre, apellido, 'Docente' AS rol FROM docente;
+-- 2. Obtener todos los docentes y los cursos que dictan (LEFT JOIN)
+SELECT d.nombre AS docente, d.apellido, c.nombre AS curso
+FROM docente d
+LEFT JOIN detalle_docente_curso dc ON d.id_docente = dc.id_docente
+LEFT JOIN curso c ON dc.id_curso = c.id_curso;
 
--- listar los nombres de las sedes y campus
-SELECT nombre, 'Sede' AS tipo FROM sede
-UNION
-SELECT nombre, 'Campus' AS tipo FROM campus;
+-- 3. Listar todas las sedes y sus respectivos campus (RIGHT JOIN)
+SELECT s.nombre AS sede, c.nombre AS campus
+FROM sede s
+RIGHT JOIN campus c ON s.id_sede = c.id_sede;
+
+-- 4. Mostrar los alumnos y sus pagos (FULL JOIN)
+SELECT a.nombre, a.apellido, p.monto, p.fecha_limite
+FROM alumno a
+FULL JOIN matricula m ON a.id_alumno = m.id_alumno
+FULL JOIN detalle_matricula_pago dmp ON m.id_matricula = dmp.id_matricula
+FULL JOIN pago p ON dmp.id_pago = p.id_pago;
+
+
 
 
 -- SUBCONSULTAS 
+-- 1. Obtener el alumno con el monto de pago más alto
+SELECT * FROM alumno
+WHERE id_alumno = (SELECT id_alumno FROM matricula WHERE id_matricula = 
+                   (SELECT id_matricula FROM detalle_matricula_pago WHERE monto_pagado = 
+                    (SELECT MAX(monto_pagado) FROM detalle_matricula_pago)));
 
--- nombres de los alumnnos que ya realizaron el pago
-SELECT nombre, apellido
-FROM alumno
-WHERE id_alumno IN (SELECT id_alumno FROM matricula WHERE id_matricula IN 
-                   (SELECT id_matricula FROM detalle_matricula_pago));
+-- 2. Listar los cursos dictados por más de un docente
+SELECT nombre FROM curso
+WHERE id_curso IN (SELECT id_curso FROM detalle_docente_curso
+                   GROUP BY id_curso
+                   HAVING COUNT(id_docente) > 1);
 
--- carreras que tienen mas de dos alumnos 
-SELECT nombre
-FROM carrera
-WHERE id_carrera IN (SELECT id_carrera FROM alumno GROUP BY id_carrera HAVING COUNT(id_alumno) > 2);
+-- 3. Mostrar las facultades que tienen más de 2 carreras
+SELECT * FROM facultad
+WHERE id_facultad IN (SELECT id_facultad FROM carrera
+                      GROUP BY id_facultad
+                      HAVING COUNT(id_carrera) > 2);
 
-
+-- 4. Listar los distritos donde hay más de una sede
+SELECT nombre FROM distrito
+WHERE id_distrito IN (SELECT id_distrito FROM sede
+                      GROUP BY id_distrito
+                      HAVING COUNT(id_sede) > 1);
 go
 --
 CREATE ROLE administrador;
@@ -1321,7 +1360,7 @@ GRANT SELECT ON provincia to tecnico
 GRANT SELECT ON departamento to tecnico
 GRANT SELECT ON campus to docente
 go 
-CREATE LOGIN JhonRamirez WITH PASSWORD = 'contraseña';
+/*CREATE LOGIN JhonRamirez WITH PASSWORD = 'contraseña';
 CREATE LOGIN JuliaGarcia WITH PASSWORD = 'contraseña';
 CREATE LOGIN MateoSanchez WITH PASSWORD = 'contraseña';
 CREATE LOGIN Martínez WITH PASSWORD = 'contraseña';
@@ -1334,7 +1373,7 @@ CREATE LOGIN Quispe WITH PASSWORD = 'contraseña';
 CREATE LOGIN MartínezQuispe WITH PASSWORD = 'contraseña';
 CREATE LOGIN Ruiz WITH PASSWORD = 'contraseña';
 CREATE LOGIN Gomez WITH PASSWORD = 'contraseña';
-CREATE LOGIN Flores WITH PASSWORD = 'contraseña';
+CREATE LOGIN Flores WITH PASSWORD = 'contraseña';*/
 go 
 CREATE USER JhonRamirez FOR LOGIN JhonRamirez;
 CREATE USER JuliaGarcia FOR LOGIN JuliaGarcia;
